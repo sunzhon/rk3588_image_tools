@@ -6,6 +6,9 @@ OUTPUT_DIR="./output/Image"
 MOUNT_DIR="./ubuntu-mount"
 
 # 1) Get rootfs.tar
+echo "0. tar ubuntu sys on a rk3588 by following commands: "
+# tar --xattrs --acls --numeric-owner --one-file-system  --exclude=/proc --exclude=/sys --exclude=/dev  --exclude=/run --exclude=/tmp  --exclude=/media  --exclude=/mnt     --exclude=/lost+found   --exclude=/var/cache/apt/archives/* --exclude=/var/lib/docker/*   --exclude=/var/tmp/*   -czpf rootfs.tar.gz     ./
+
 echo "1. Downloading rootfs ..."
 # Uncomment and modify this line for actual rsync or download command
 # sudo rsync -avx lumosbot@192.168.54.110:/rootfs.tar.gz ./
