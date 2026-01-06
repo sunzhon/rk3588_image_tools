@@ -15,8 +15,15 @@ echo "1. Downloading rootfs ..."
 
 # 2) Unzip the rootfs.tar.gz
 echo "2. Extracting rootfs ..."
-sudo rm -rf ./rootfs
+if [ -d "./rootfs" ]; then
+    echo "./rootfs exists, deleting ..."
+    sudo rm -rf ./rootfs
+fi
 mkdir rootfs
+if [ ! -f "$ROOTFS_TAR" ]; then
+    echo "Error: $ROOTFS_TAR does not exist. Exiting..."
+    exit 1
+fi
 tar -zxvf $ROOTFS_TAR -C ./rootfs
 
 # 3) Create image file
@@ -61,7 +68,14 @@ sudo ./pack.sh
 
 # 11) Perform the upgrade with the new image
 echo "11. Performing upgrade with new image ..."
-sudo upgrade_tool uf new_update.img
+DEVICE_OUTPUT=$(sudo upgrade_tool ld)
+if [ -n "$DEVICE_OUTPUT" ]; then
+    echo "Device found, proceeding with upgrade ..."
+    sudo upgrade_tool uf new_update.img
+else
+    echo "No device found. Exiting..."
+    exit 1
+fi
 
 # Clean up
 echo "12. Cleaning up ..."
