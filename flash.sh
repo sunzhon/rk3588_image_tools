@@ -11,7 +11,7 @@ echo "0. tar ubuntu sys on a rk3588 by following commands: "
 
 echo "1. Downloading rootfs ..."
 # Uncomment and modify this line for actual rsync or download command
-# sudo rsync -avx lumosbot@192.168.54.110:/rootfs.tar.gz ./
+sudo rsync -avx lumosbot@192.168.54.110:/rootfs.tar.gz ./
 
 # 2) Unzip the rootfs.tar.gz
 echo "2. Extracting rootfs ..."
@@ -80,6 +80,9 @@ fi
 # Clean up
 echo "12. Cleaning up ..."
 sudo rm -rf $MOUNT_DIR rootfs
+
+echo "zip rootfs for other window user to flash ..."
+sudo zip lus_os_image_v0.1.2.zip ${OUTPUT_DIR}/rootfs.img
 
 echo "Process complete!"
 
