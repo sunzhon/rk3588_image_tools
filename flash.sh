@@ -7,12 +7,12 @@ MOUNT_DIR="./ubuntu-mount"
 
 # 1) Get rootfs.tar
 echo "0. tar ubuntu sys on a rk3588 by following commands: "
-# tar --xattrs --acls --numeric-owner --one-file-system  --exclude=/proc --exclude=/sys --exclude=/dev  --exclude=/run --exclude=/tmp  --exclude=/media  --exclude=/mnt     --exclude=/lost+found   --exclude=/var/cache/apt/archives/* --exclude=/var/lib/docker/*   --exclude=/var/tmp/*   -czpf rootfs.tar.gz     ./
+ssh lumosbot@192.168.54.110 'cd / && sudo tar --xattrs --acls --numeric-owner --one-file-system  --exclude=/proc --exclude=/sys --exclude=/dev  --exclude=/run --exclude=/tmp  --exclude=/media  --exclude=/mnt --exclude=/lost+found  --exclude=/var/cache/apt/archives/* --exclude=/var/lib/docker/*   --exclude=/var/tmp/*  --exclude=/devel/lumos_ws/controller_log -czpf rootfs.tar.gz ./'
 
 echo "1. Downloading rootfs ..."
-# Uncomment and modify this line for actual rsync or download command
+## Uncomment and modify this line for actual rsync or download command
 sudo rsync -avx lumosbot@192.168.54.110:/rootfs.tar.gz ./
-
+#
 # 2) Unzip the rootfs.tar.gz
 echo "2. Extracting rootfs ..."
 if [ -d "./rootfs" ]; then
@@ -24,7 +24,8 @@ if [ ! -f "$ROOTFS_TAR" ]; then
     echo "Error: $ROOTFS_TAR does not exist. Exiting..."
     exit 1
 fi
-tar -zxvf $ROOTFS_TAR -C ./rootfs
+sudo tar -zxvf $ROOTFS_TAR -C ./rootfs
+sudo chown root:root ./rootfs
 
 # 3) Create image file
 echo "3. Creating image file ..."
@@ -56,11 +57,13 @@ sudo resize2fs -M $IMG_FILE
 # 9) Move the image to output directory
 echo "9. Moving image to output directory ..."
 
+
 echo "You should have a origial image call update.img, you should copy it here ..."
 sudo cp ./../update.img ./
 sudo ./unpack.sh
 
 sudo mv $IMG_FILE $OUTPUT_DIR/rootfs.img
+sudo chown root:root $OUTPUT_DIR/rootfs.img
 
 # 10) Execute the pack.sh script
 echo "10. Running pack.sh ..."
@@ -77,12 +80,14 @@ else
     exit 1
 fi
 
+
 # Clean up
 echo "12. Cleaning up ..."
 sudo rm -rf $MOUNT_DIR rootfs
+sudo rm -rf rootfs.tar.gz
 
 echo "zip rootfs for other window user to flash ..."
-sudo zip lus_os_image_v0.1.2.zip ${OUTPUT_DIR}/rootfs.img
+sudo zip lus_os_v0.1.3.zip ${OUTPUT_DIR}/rootfs.img
 
 echo "Process complete!"
 
