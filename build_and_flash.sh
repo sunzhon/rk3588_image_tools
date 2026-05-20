@@ -328,9 +328,9 @@ step9_save_rootfs() {
     fi
 
     mkdir -p $OUTPUT_DIR
-    sudo cp $IMG_FILE $OUTPUT_DIR/$ROOTFS_IMG_NAME
-    sudo chown root:root $OUTPUT_DIR/$ROOTFS_IMG_NAME
-    print_success "已保存: $OUTPUT_DIR/$ROOTFS_IMG_NAME"
+    sudo cp $IMG_FILE $OUTPUT_DIR/rootfs.img
+    sudo chown root:root $OUTPUT_DIR/rootfs.img
+    print_success "已保存: $OUTPUT_DIR/rootfs.img"
 }
 
 step10_run_pack() {
@@ -351,6 +351,10 @@ step10_run_pack() {
         print_error "new_update.img 未生成"
         return 1
     fi
+
+    # 创建带日期的 rootfs.img 副本供分发
+    sudo cp ${OUTPUT_DIR}/rootfs.img ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}
+    print_success "已生成分发包: ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}"
 }
 
 step11_perform_upgrade() {
