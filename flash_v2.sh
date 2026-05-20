@@ -386,8 +386,8 @@ for ((i=$START_STEP; i<=12; i++)); do
     echo ""
     print_info "========== 准备执行步骤 $i =========="
     
-    # 在自动模式下不询问，直接执行
-    if [ $AUTO_MODE -eq 1 ]; then
+    # 自动模式或步骤4-10：直接执行，不询问
+    if [ $AUTO_MODE -eq 1 ] || ([ $i -ge 4 ] && [ $i -le 10 ]); then
         ${steps[$i]}
         if [ $? -ne 0 ]; then
             print_error "步骤 $i 执行失败"
@@ -398,9 +398,8 @@ for ((i=$START_STEP; i<=12; i++)); do
         step_name=$(echo ${steps[$i]} | sed 's/step[0-9]*_//' | tr '_' ' ')
         confirm_step "$step_name" "y"
         confirm_result=$?
-        
+
         if [ $confirm_result -eq 0 ]; then
-            # 执行步骤
             ${steps[$i]}
             if [ $? -ne 0 ]; then
                 print_error "步骤 $i 执行失败"
@@ -410,18 +409,15 @@ for ((i=$START_STEP; i<=12; i++)); do
                     exit 1
                 fi
             fi
-            
-            # 等待用户确认继续
+
             if [ $i -lt 12 ]; then
                 wait_for_continue
             fi
-            
+
         elif [ $confirm_result -eq 1 ]; then
-            # 不执行，继续下一个
             print_info "跳过步骤 $i"
             continue
         elif [ $confirm_result -eq 2 ]; then
-            # 跳过
             print_info "用户选择跳过步骤 $i"
             continue
         fi
