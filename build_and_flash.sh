@@ -101,9 +101,9 @@ show_help() {
     echo "  6: 复制rootfs到镜像"
     echo "  7: 卸载镜像"
     echo "  8: 检查并调整文件系统"
-    echo "  9: 移动镜像到输出目录"
-    echo "  10: 执行pack.sh"
-    echo "  11: 执行升级"
+    echo "  9: 保存rootfs.img到输出目录"
+    echo "  10: 打包生成new_update.img"
+    echo "  11: 烧写镜像到设备"
     echo "  12: 清理"
 }
 
@@ -119,9 +119,9 @@ list_steps() {
     echo "  6: 复制rootfs到镜像"
     echo "  7: 卸载镜像"
     echo "  8: 检查并调整文件系统"
-    echo "  9: 移动镜像到输出目录"
-    echo "  10: 执行pack.sh"
-    echo "  11: 执行升级"
+    echo "  9: 保存rootfs.img到输出目录"
+    echo "  10: 打包生成new_update.img"
+    echo "  11: 烧写镜像到设备"
     echo "  12: 清理"
 }
 
@@ -181,6 +181,11 @@ step0_create_remote_rootfs() {
         --exclude=./media --exclude=./mnt --exclude=./lost+found \
         --exclude=./var/cache/apt/archives/* --exclude=./var/lib/docker/* \
         --exclude=./var/tmp/* --exclude=./devel/lumos_ws/controller_log \
+        --exclude=./home/lumosbot/thomas_ws \
+        --exclude=./home/lumosbot/.vscode-server \
+        --exclude=./home/lumosbot/.claude \
+        --exclude=./home/lumosbot/.copilot \
+        --exclude=./home/lumosbot/.cursor-server \
         -czpf /tmp/rootfs.tar.gz ./'
 
     local remote_size=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
@@ -300,9 +305,9 @@ step8_resize_image() {
     print_success "调整后镜像大小: $img_size"
 }
 
-step9_move_image() {
-    print_info "9. 移动镜像到输出目录"
-    
+step9_save_rootfs() {
+    print_info "9. 保存rootfs.img到输出目录"
+
     # 检查update.img
     if [ ! -f "./../update.img" ]; then
         print_warning "update.img 不存在，请确保已准备好原始镜像"
@@ -314,15 +319,15 @@ step9_move_image() {
         sudo ./unpack.sh
         check_status "unpack.sh执行"
     fi
-    
+
     mkdir -p $OUTPUT_DIR
-    sudo mv $IMG_FILE $OUTPUT_DIR/rootfs.img
+    sudo cp $IMG_FILE $OUTPUT_DIR/rootfs.img
     sudo chown root:root $OUTPUT_DIR/rootfs.img
-    print_success "镜像已移动到: $OUTPUT_DIR/rootfs.img"
+    print_success "rootfs.img 已保存到: $OUTPUT_DIR/rootfs.img"
 }
 
 step10_run_pack() {
-    print_info "10. 执行pack.sh"
+    print_info "10. 打包生成new_update.img"
     
     if [ ! -f "./pack.sh" ]; then
         print_error "pack.sh 文件不存在"
@@ -334,30 +339,51 @@ step10_run_pack() {
 }
 
 step11_perform_upgrade() {
-    print_info "11. 执行升级"
-    
+    print_info "11. 烧写镜像到设备"
+
     print_info "检查设备连接..."
     DEVICE_OUTPUT=$(sudo upgrade_tool ld 2>/dev/null)
-    
-    if [ -n "$DEVICE_OUTPUT" ]; then
-        print_success "设备已找到，准备升级..."
-        print_warning "警告：升级过程将覆盖设备数据！"
-        
-        if confirm_step "确认执行升级" "n"; then
-            print_info "擦除设备flash..."
-            sudo upgrade_tool ef new_update.img
-            check_status "Flash擦除"
 
-            print_info "写入镜像..."
-            sudo upgrade_tool uf new_update.img
-            check_status "设备升级"
-        else
-            print_info "跳过升级步骤"
-            return 0
-        fi
-    else
+    if [ -z "$DEVICE_OUTPUT" ]; then
         print_error "未找到设备，请检查连接"
         return 1
+    fi
+
+    print_success "设备已找到，准备烧写..."
+    print_warning "警告：烧写过程将覆盖设备数据！"
+    echo ""
+    echo "  请选择烧写方式:"
+    echo "  1) 烧写 rootfs.img  (仅更新rootfs分区，Windows测试人员常用)"
+    echo "  2) 烧写 new_update.img (完整固件，擦除全部flash)"
+    echo ""
+
+    if confirm_step "确认执行烧写" "n"; then
+        while true; do
+            echo -e -n "${YELLOW}请选择烧写方式 [1/2]: ${NC}"
+            read -r flash_choice
+            case $flash_choice in
+                1)
+                    print_info "烧写 rootfs.img 到 rootfs 分区..."
+                    sudo upgrade_tool di -p rootfs $OUTPUT_DIR/rootfs.img
+                    check_status "rootfs分区烧写"
+                    break
+                    ;;
+                2)
+                    print_info "擦除设备flash..."
+                    sudo upgrade_tool ef new_update.img
+                    check_status "Flash擦除"
+
+                    print_info "写入完整固件..."
+                    sudo upgrade_tool uf new_update.img
+                    check_status "完整固件烧写"
+                    break
+                    ;;
+                *) echo "请输入 1 或 2";;
+            esac
+        done
+    else
+        print_info "跳过烧写步骤"
+        return 0
     fi
 }
 
@@ -383,7 +409,7 @@ step12_cleanup() {
 # 主执行流程
 steps=(step0_create_remote_rootfs step1_download_rootfs step2_extract_rootfs \
        step3_create_image step4_format_image step5_mount_image step6_copy_rootfs \
-       step7_unmount_image step8_resize_image step9_move_image step10_run_pack \
+       step7_unmount_image step8_resize_image step9_save_rootfs step10_run_pack \
        step11_perform_upgrade step12_cleanup)
 
 # 从指定步骤开始执行
