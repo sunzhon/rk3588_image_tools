@@ -15,6 +15,13 @@ MOUNT_DIR="./ubuntu-mount"
 REMOTE_IP="192.168.54.110"
 REMOTE_USER="lumosbot"
 
+# 版本和日期信息
+VERSION="v0.1.3"
+BUILD_DATE=$(date +%Y%m%d)
+ROOTFS_IMG_NAME="rootfs_${BUILD_DATE}_${VERSION}.img"
+UPDATE_IMG_NAME="new_update_${BUILD_DATE}_${VERSION}.img"
+ZIP_NAME="lus_os_${BUILD_DATE}_${VERSION}.zip"
+
 # 创建日志文件
 LOG_FILE="build_$(date +%Y%m%d_%H%M%S).log"
 exec 2> >(tee -a "$LOG_FILE" >&2)
@@ -321,9 +328,9 @@ step9_save_rootfs() {
     fi
 
     mkdir -p $OUTPUT_DIR
-    sudo cp $IMG_FILE $OUTPUT_DIR/rootfs.img
-    sudo chown root:root $OUTPUT_DIR/rootfs.img
-    print_success "rootfs.img 已保存到: $OUTPUT_DIR/rootfs.img"
+    sudo cp $IMG_FILE $OUTPUT_DIR/$ROOTFS_IMG_NAME
+    sudo chown root:root $OUTPUT_DIR/$ROOTFS_IMG_NAME
+    print_success "已保存: $OUTPUT_DIR/$ROOTFS_IMG_NAME"
 }
 
 step10_run_pack() {
@@ -336,6 +343,14 @@ step10_run_pack() {
     
     sudo ./pack.sh
     check_status "pack.sh执行"
+
+    if [ -f "new_update.img" ]; then
+        sudo mv new_update.img $UPDATE_IMG_NAME
+        print_success "已生成: $UPDATE_IMG_NAME"
+    else
+        print_error "new_update.img 未生成"
+        return 1
+    fi
 }
 
 step11_perform_upgrade() {
@@ -363,18 +378,18 @@ step11_perform_upgrade() {
             read -r flash_choice
             case $flash_choice in
                 1)
-                    print_info "烧写 rootfs.img 到 rootfs 分区..."
-                    sudo upgrade_tool di -p rootfs $OUTPUT_DIR/rootfs.img
+                    print_info "烧写 $ROOTFS_IMG_NAME 到 rootfs 分区..."
+                    sudo upgrade_tool di -p rootfs $OUTPUT_DIR/$ROOTFS_IMG_NAME
                     check_status "rootfs分区烧写"
                     break
                     ;;
                 2)
                     print_info "擦除设备flash..."
-                    sudo upgrade_tool ef new_update.img
+                    sudo upgrade_tool ef $UPDATE_IMG_NAME
                     check_status "Flash擦除"
 
                     print_info "写入完整固件..."
-                    sudo upgrade_tool uf new_update.img
+                    sudo upgrade_tool uf $UPDATE_IMG_NAME
                     check_status "完整固件烧写"
                     break
                     ;;
@@ -397,12 +412,12 @@ step12_cleanup() {
     fi
     
     # 创建zip文件
-    if [ -f "${OUTPUT_DIR}/rootfs.img" ]; then
+    if [ -f "${OUTPUT_DIR}/${ROOTFS_IMG_NAME}" ]; then
         print_info "创建ZIP压缩包..."
-        sudo zip lus_os_v0.1.3.zip ${OUTPUT_DIR}/rootfs.img
-        print_success "ZIP压缩包已创建: lus_os_v0.1.3.zip"
+        sudo zip $ZIP_NAME ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}
+        print_success "ZIP压缩包已创建: $ZIP_NAME"
     else
-        print_warning "rootfs.img 不存在，跳过ZIP创建"
+        print_warning "${ROOTFS_IMG_NAME} 不存在，跳过ZIP创建"
     fi
 }
 
@@ -460,7 +475,7 @@ print_success "脚本执行完成！"
 print_info "详细日志已保存到: $LOG_FILE"
 
 # 显示最终结果
-if [ -f "lus_os_v0.1.3.zip" ]; then
-    final_size=$(du -h lus_os_v0.1.3.zip | cut -f1)
-    print_success "最终输出文件: lus_os_v0.1.3.zip (大小: $final_size)"
-fi
+print_info "输出文件:"
+[ -f "${OUTPUT_DIR}/${ROOTFS_IMG_NAME}" ] && print_success "  rootfs镜像: ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}"
+[ -f "$UPDATE_IMG_NAME" ] && print_success "  完整固件: $UPDATE_IMG_NAME"
+[ -f "$ZIP_NAME" ] && print_success "  ZIP压缩包: $ZIP_NAME ($(du -h $ZIP_NAME | cut -f1))"
