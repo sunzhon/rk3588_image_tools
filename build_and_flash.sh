@@ -344,6 +344,11 @@ step11_perform_upgrade() {
         print_warning "警告：升级过程将覆盖设备数据！"
         
         if confirm_step "确认执行升级" "n"; then
+            print_info "擦除设备flash..."
+            sudo upgrade_tool ef new_update.img
+            check_status "Flash擦除"
+
+            print_info "写入镜像..."
             sudo upgrade_tool uf new_update.img
             check_status "设备升级"
         else
