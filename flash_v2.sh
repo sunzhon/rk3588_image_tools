@@ -166,18 +166,48 @@ print_info "开始步骤: $START_STEP"
 # 定义步骤函数
 step0_create_remote_rootfs() {
     print_info "0. 在远程设备上创建rootfs.tar.gz"
-    ssh ${REMOTE_USER}@${REMOTE_IP} 'cd / && sudo tar --xattrs --acls --numeric-owner --one-file-system \
-        --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp \
-        --exclude=/media --exclude=/mnt --exclude=/lost+found \
-        --exclude=/var/cache/apt/archives/* --exclude=/var/lib/docker/* \
-        --exclude=/var/tmp/* --exclude=/devel/lumos_ws/controller_log \
-        -czpf rootfs.tar.gz ./'
-    check_status "远程rootfs创建"
+
+    # Check if remote file already exists
+    local existing=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
+    if [ "$existing" -gt 1048576 ]; then
+        print_success "远程 /tmp/rootfs.tar.gz 已存在 ($(( existing / 1048576 ))MB)，跳过创建"
+        return 0
+    fi
+
+    print_info "开始打包 (远程sudo可能需要密码，请留意提示)..."
+    ssh -t ${REMOTE_USER}@${REMOTE_IP} 'cd / && sudo tar --warning=no-file-changed \
+        --xattrs --acls --numeric-owner --one-file-system \
+        --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
+        --exclude=./media --exclude=./mnt --exclude=./lost+found \
+        --exclude=./var/cache/apt/archives/* --exclude=./var/lib/docker/* \
+        --exclude=./var/tmp/* --exclude=./devel/lumos_ws/controller_log \
+        -czpf /tmp/rootfs.tar.gz ./'
+
+    local remote_size=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
+    if [ "$remote_size" -gt 1048576 ]; then
+        print_success "远程rootfs创建完成 ($(( remote_size / 1048576 ))MB)"
+        return 0
+    else
+        print_error "远程rootfs创建失败 (文件大小: ${remote_size} bytes)"
+        return 1
+    fi
 }
 
 step1_download_rootfs() {
     print_info "1. 下载rootfs.tar.gz"
-    sudo rsync -avx --progress ${REMOTE_USER}@${REMOTE_IP}:/rootfs.tar.gz ./
+
+    local local_size=0
+    [ -f "$ROOTFS_TAR" ] && local_size=$(stat -c%s "$ROOTFS_TAR" 2>/dev/null || echo 0)
+
+    local remote_size=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
+
+    if [ "$local_size" -gt 0 ] && [ "$local_size" -eq "$remote_size" ]; then
+        print_success "rootfs.tar.gz 已是最新 (大小: $(( local_size / 1048576 ))MB)，跳过下载"
+        return 0
+    fi
+
+    print_info "从远程下载 /tmp/rootfs.tar.gz ..."
+    rsync -avx --progress --partial ${REMOTE_USER}@${REMOTE_IP}:/tmp/rootfs.tar.gz ./
     check_status "rootfs下载"
 }
 

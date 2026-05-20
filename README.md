@@ -1,6 +1,7 @@
 ## Make rk3588 image based on an existing OS
 
 **Do it on rk3588**
+echo "making rk3588 image based on a base image and exiting os rk3588 OS  ... "
 1. copy files from the existing OS by following code:
 
 tar --xattrs --acls --numeric-owner --one-file-system     --exclude=/proc --exclude=/sys --exclude=/dev  --exclude=/run --exclude=/tmp  --exclude=/media  --exclude=/mnt     --exclude=/lost+found   --exclude=/var/cache/apt/archives/* --exclude=/var/lib/docker/*   --exclude=/var/tmp/*     -czpf rootfs.tar.gz     ./
@@ -35,7 +36,7 @@ sudo mv rk3588_20260106.img ./output/Image/rootfs.img
 
 sudo ./pack.sh
 
-echo "try to upgrade, please connect rk3588 board ... "
+echo "try to upgrade, please connect rk3588 board via usb port ... "
 sleep 2
 
 sudo upgrade_tool uf new_update.img
