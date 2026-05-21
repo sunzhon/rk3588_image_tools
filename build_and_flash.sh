@@ -14,13 +14,18 @@ OUTPUT_DIR="./output/Image"
 MOUNT_DIR="./ubuntu-mount"
 REMOTE_IP="192.168.54.110"
 REMOTE_USER="lumosbot"
+REMOTE_SUDO_PASSWORD="lumosbot"
+LOCAL_SUDO_PASSWORD="l"
+
+# 重写sudo为自动提供密码的非交互版本（仅影响本地sudo，远程不受影响）
+sudo() {
+    echo "$LOCAL_SUDO_PASSWORD" | command sudo -S "$@"
+}
 
 # 版本和日期信息
-VERSION="v0.1.3"
+SCRIPT_VERSION="v0.1.3"
+ROOTFS_VERSION=""
 BUILD_DATE=$(date +%Y%m%d)
-ROOTFS_IMG_NAME="rootfs_${BUILD_DATE}_${VERSION}.img"
-UPDATE_IMG_NAME="new_update_${BUILD_DATE}_${VERSION}.img"
-ZIP_NAME="lus_os_${BUILD_DATE}_${VERSION}.zip"
 
 # 创建日志文件
 LOG_FILE="build_$(date +%Y%m%d_%H%M%S).log"
@@ -96,6 +101,7 @@ show_help() {
     echo "  -h, --help     显示此帮助信息"
     echo "  -s, --step N   从步骤N开始执行"
     echo "  -a, --auto     自动模式（不询问）"
+    echo "  -v, --version V 设置rootfs版本号 (如 1.1.8)"
     echo "  -l, --list     列出所有步骤"
     echo ""
     echo "步骤说明:"
@@ -150,6 +156,10 @@ while [[ $# -gt 0 ]]; do
             AUTO_MODE=1
             shift
             ;;
+        -v|--version)
+            ROOTFS_VERSION="$2"
+            shift 2
+            ;;
         -s|--step)
             START_STEP="$2"
             if ! [[ "$START_STEP" =~ ^[0-9]+$ ]] || [ "$START_STEP" -gt 12 ]; then
@@ -166,23 +176,63 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# 确定rootfs版本号
+if [ -z "$ROOTFS_VERSION" ]; then
+    if [ $AUTO_MODE -eq 1 ]; then
+        print_error "自动模式下需通过 -v 指定版本号 (如 -v 1.1.8)"
+        exit 1
+    fi
+    echo -e -n "${YELLOW}请输入rootfs版本号 (如 1.1.8): ${NC}"
+    read -r ROOTFS_VERSION
+    if [ -z "$ROOTFS_VERSION" ]; then
+        print_error "版本号不能为空"
+        exit 1
+    fi
+fi
+
+# 设置输出文件名（版本号确定后）
+ROOTFS_IMG_NAME="rootfs_${BUILD_DATE}_v${ROOTFS_VERSION}.img"
+UPDATE_IMG_NAME="new_update_${BUILD_DATE}_v${ROOTFS_VERSION}.img"
+ZIP_NAME="lus_os_${BUILD_DATE}_v${ROOTFS_VERSION}.zip"
+
+# 远程更新 /etc/os-release 的函数
+update_remote_os_release() {
+    print_info "更新远程设备 /etc/os-release..."
+
+    ssh ${REMOTE_USER}@${REMOTE_IP} "echo '${REMOTE_SUDO_PASSWORD}' | sudo -S sed -i \
+        -e 's/VERSION=\"v[0-9.]*\"/VERSION=\"v${ROOTFS_VERSION}\"/' \
+        -e 's/VERSION_ID=\"[0-9.]*\"/VERSION_ID=\"${ROOTFS_VERSION}\"/' \
+        -e 's/ID=nix_rootfs\.[0-9.]*/ID=nix_rootfs.${ROOTFS_VERSION}/' \
+        -e 's/BUILD_ID=\"[0-9]*\"/BUILD_ID=\"${BUILD_DATE}\"/' \
+        -e 's/nix tactile intelligence rootfs v[0-9.]*/nix tactile intelligence rootfs v${ROOTFS_VERSION}/' \
+        /etc/os-release" 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        print_success "远程 /etc/os-release 已更新为版本 v${ROOTFS_VERSION}"
+    else
+        print_warning "远程 /etc/os-release 更新可能失败，请手动检查"
+    fi
+}
+
 # 主脚本开始
 print_info "脚本开始执行，日志文件: $LOG_FILE"
+print_info "rootfs 版本: v${ROOTFS_VERSION}"
 print_info "开始步骤: $START_STEP"
 
 # 定义步骤函数
 step0_create_remote_rootfs() {
     print_info "0. 在远程设备上创建rootfs.tar.gz"
 
-    # Check if remote file already exists
-    local existing=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
-    if [ "$existing" -gt 1048576 ]; then
-        print_success "远程 /tmp/rootfs.tar.gz 已存在 ($(( existing / 1048576 ))MB)，跳过创建"
-        return 0
-    fi
+    # 先更新远程 /etc/os-release 版本信息
+    update_remote_os_release
 
-    print_info "开始打包 (远程sudo可能需要密码，请留意提示)..."
-    ssh -t ${REMOTE_USER}@${REMOTE_IP} 'cd / && sudo tar --warning=no-file-changed \
+    # 删除旧tarball确保包含最新的 os-release
+    ssh ${REMOTE_USER}@${REMOTE_IP} "echo '${REMOTE_SUDO_PASSWORD}' | sudo -S rm -f /tmp/rootfs.tar.gz" 2>/dev/null
+
+    print_info "开始打包 (这可能需要几分钟)..."
+
+    # 使用 sudo -S bash -c 确保密码正确传递，避免管道与 && 的优先级问题
+    local tar_cmd="cd / && tar --warning=no-file-changed \
         --xattrs --acls --numeric-owner --one-file-system \
         --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
         --exclude=./media --exclude=./mnt --exclude=./lost+found \
@@ -193,7 +243,9 @@ step0_create_remote_rootfs() {
         --exclude=./home/lumosbot/.claude \
         --exclude=./home/lumosbot/.copilot \
         --exclude=./home/lumosbot/.cursor-server \
-        -czpf /tmp/rootfs.tar.gz ./'
+        -czpf /tmp/rootfs.tar.gz ./"
+
+    ssh ${REMOTE_USER}@${REMOTE_IP} "echo '${REMOTE_SUDO_PASSWORD}' | sudo -S bash -c '${tar_cmd}'"
 
     local remote_size=$(ssh ${REMOTE_USER}@${REMOTE_IP} 'stat -c%s /tmp/rootfs.tar.gz 2>/dev/null || echo 0')
     if [ "$remote_size" -gt 1048576 ]; then
@@ -415,14 +467,6 @@ step12_cleanup() {
         print_success "临时文件已清理"
     fi
     
-    # 创建zip文件
-    if [ -f "${OUTPUT_DIR}/${ROOTFS_IMG_NAME}" ]; then
-        print_info "创建ZIP压缩包..."
-        sudo zip $ZIP_NAME ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}
-        print_success "ZIP压缩包已创建: $ZIP_NAME"
-    else
-        print_warning "${ROOTFS_IMG_NAME} 不存在，跳过ZIP创建"
-    fi
 }
 
 # 主执行流程
@@ -482,4 +526,4 @@ print_info "详细日志已保存到: $LOG_FILE"
 print_info "输出文件:"
 [ -f "${OUTPUT_DIR}/${ROOTFS_IMG_NAME}" ] && print_success "  rootfs镜像: ${OUTPUT_DIR}/${ROOTFS_IMG_NAME}"
 [ -f "$UPDATE_IMG_NAME" ] && print_success "  完整固件: $UPDATE_IMG_NAME"
-[ -f "$ZIP_NAME" ] && print_success "  ZIP压缩包: $ZIP_NAME ($(du -h $ZIP_NAME | cut -f1))"
+# ZIP generation removed per user preference
