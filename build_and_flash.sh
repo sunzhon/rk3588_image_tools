@@ -9,7 +9,7 @@ NC='\033[0m' # No Color
 
 # 配置文件路径
 ROOTFS_TAR="rootfs.tar.gz"
-IMG_FILE="rk3588_20260106.img"
+IMG_FILE="rk3588_rootfs.img"
 OUTPUT_DIR="./output/Image"
 MOUNT_DIR="./ubuntu-mount"
 REMOTE_IP="192.168.54.110"
@@ -23,7 +23,7 @@ sudo() {
 }
 
 # 版本和日期信息
-SCRIPT_VERSION="v0.1.3"
+SCRIPT_VERSION="v1.1.8"
 ROOTFS_VERSION=""
 BUILD_DATE=$(date +%Y%m%d)
 
@@ -380,7 +380,7 @@ step9_save_rootfs() {
     fi
 
     mkdir -p $OUTPUT_DIR
-    sudo cp $IMG_FILE $OUTPUT_DIR/rootfs.img
+    sudo mv $IMG_FILE $OUTPUT_DIR/rootfs.img
     sudo chown root:root $OUTPUT_DIR/rootfs.img
     print_success "已保存: $OUTPUT_DIR/rootfs.img"
 }

@@ -6,5 +6,7 @@ rootfs
 ubuntu-mount
 
 *.log
+.omc
+~/
 
 
