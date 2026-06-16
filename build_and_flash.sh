@@ -23,7 +23,7 @@ sudo() {
 }
 
 # 版本和日期信息
-SCRIPT_VERSION="v1.1.8"
+SCRIPT_VERSION="v1.1.9X"
 ROOTFS_VERSION=""
 BUILD_DATE=$(date +%Y%m%d)
 
@@ -200,11 +200,11 @@ update_remote_os_release() {
     print_info "更新远程设备 /etc/os-release..."
 
     ssh ${REMOTE_USER}@${REMOTE_IP} "echo '${REMOTE_SUDO_PASSWORD}' | sudo -S sed -i \
-        -e 's/VERSION=\"v[0-9.]*\"/VERSION=\"v${ROOTFS_VERSION}\"/' \
-        -e 's/VERSION_ID=\"[0-9.]*\"/VERSION_ID=\"${ROOTFS_VERSION}\"/' \
-        -e 's/ID=nix_rootfs\.[0-9.]*/ID=nix_rootfs.${ROOTFS_VERSION}/' \
+        -e 's/VERSION=\"v[0-9A-Za-z.]*\"/VERSION=\"v${ROOTFS_VERSION}\"/' \
+        -e 's/VERSION_ID=\"[0-9A-Za-z.]*\"/VERSION_ID=\"${ROOTFS_VERSION}\"/' \
+        -e 's/ID=nix_rootfs\.[0-9A-Za-z.]*/ID=nix_rootfs.${ROOTFS_VERSION}/' \
         -e 's/BUILD_ID=\"[0-9]*\"/BUILD_ID=\"${BUILD_DATE}\"/' \
-        -e 's/nix tactile intelligence rootfs v[0-9.]*/nix tactile intelligence rootfs v${ROOTFS_VERSION}/' \
+        -e 's/nix tactile intelligence rootfs v[0-9A-Za-z.]*/nix tactile intelligence rootfs v${ROOTFS_VERSION}/' \
         /etc/os-release" 2>/dev/null
 
     if [ $? -eq 0 ]; then
@@ -238,11 +238,18 @@ step0_create_remote_rootfs() {
         --exclude=./media --exclude=./mnt --exclude=./lost+found \
         --exclude=./var/cache/apt/archives/* --exclude=./var/lib/docker/* \
         --exclude=./var/tmp/* --exclude=./devel/lumos_ws/controller_log \
+        --exclude=./var/log/* \
         --exclude=./home/lumosbot/thomas_ws \
         --exclude=./home/lumosbot/.vscode-server \
         --exclude=./home/lumosbot/.claude \
         --exclude=./home/lumosbot/.copilot \
         --exclude=./home/lumosbot/.cursor-server \
+        --exclude=./home/lumosbot/.cache \
+        --exclude=./home/lumosbot/.config \
+        --exclude=./home/lumosbot/.cmake \
+        --exclude=./home/lumosbot/.bin \
+        --exclude=./home/lumosbot/.dotnet \
+        --exclude=./home/lumosbot/.local \
         -czpf /tmp/rootfs.tar.gz ./"
 
     ssh ${REMOTE_USER}@${REMOTE_IP} "echo '${REMOTE_SUDO_PASSWORD}' | sudo -S bash -c '${tar_cmd}'"
